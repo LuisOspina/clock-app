@@ -11,7 +11,7 @@ type ClockModule = {
   testingApproach: string
 }
 
-const notesBaseUrl = 'https://raw.githubusercontent.com/LuisOspina/clock-notes/main'
+const notesBaseUrl = 'https://api.github.com/repos/LuisOspina/clock-notes/contents'
 
 const modules: ClockModule[] = [
   {
@@ -85,8 +85,9 @@ function NotesPanel({ module }: { module: ClockModule }) {
   useEffect(() => {
     const controller = new AbortController()
 
-    fetch(`${notesBaseUrl}/${module.id}.md?updated=${Date.now()}`, {
+    fetch(`${notesBaseUrl}/${module.id}.md?ref=main&updated=${Date.now()}`, {
       cache: 'no-store',
+      headers: { Accept: 'application/vnd.github.raw+json' },
       signal: controller.signal,
     })
       .then((response) => {
