@@ -1,0 +1,63 @@
+name: Deploy to AWS Amplify
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.19.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Build the app
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm build
+
+      - name: Connect to AWS
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ca-central-1
+
+      - name: Deploy the build
+        run: |
+          cd dist
+          zip -r ../deployment.zip .
+          cd ..
+
+          deployment=$(aws amplify create-deployment \
+            --app-id d1olg5zyqlqlzy \
+            --branch-name main)
+
+          job_id=$(echo "$deployment" | jq -r '.jobId')
+          upload_url=$(echo "$deployment" | jq -r '.zipUploadUrl')
+
+          curl --fail --silent --show-error \
+            --request PUT \
+            --upload-file deployment.zip \
+            "$upload_url"
+
+          aws amplify start-deployment \
+            --app-id d1olg5zyqlqlzy \
+            --branch-name main \
+            --job-id "$job_id"

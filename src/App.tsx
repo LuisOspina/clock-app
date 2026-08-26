@@ -7,6 +7,7 @@ type ClockModule = {
   id: ModuleId
   label: string
   requirements: string[]
+  testingApproach: string
 }
 
 const modules: ClockModule[] = [
@@ -23,6 +24,7 @@ const modules: ClockModule[] = [
       'Each additional Lap freezes the active lap and begins the next one.',
       'The lap list is horizontally scrollable and shows three cards at a time.',
     ],
+    testingApproach: 'Add your Stopwatch testing notes here as you work through them.',
   },
   {
     id: 'alarms',
@@ -31,6 +33,7 @@ const modules: ClockModule[] = [
       'This module is a placeholder in the first release.',
       'Alarm creation, repetition, snoozing, and next-trigger logic are not implemented yet.',
     ],
+    testingApproach: 'Testing notes will be added when this module is implemented.',
   },
   {
     id: 'timers',
@@ -39,6 +42,7 @@ const modules: ClockModule[] = [
       'This module is a placeholder in the first release.',
       'Countdown creation, pausing, resuming, and completion alerts are not implemented yet.',
     ],
+    testingApproach: 'Testing notes will be added when this module is implemented.',
   },
   {
     id: 'world-clock',
@@ -47,6 +51,7 @@ const modules: ClockModule[] = [
       'This module is a placeholder in the first release.',
       'City selection, time-zone conversion, and daylight-saving behavior are not implemented yet.',
     ],
+    testingApproach: 'Testing notes will be added when this module is implemented.',
   },
 ]
 
@@ -236,8 +241,9 @@ function App() {
 
       <main id="main" className="app-main">
         <section className="requirements-panel" aria-labelledby="requirements-title">
-          <p className="eyebrow">Functional requirements</p>
-          <h1 id="requirements-title">{activeModule.label}</h1>
+          <h1 id="requirements-title" className="eyebrow">
+            Functional requirements
+          </h1>
 
           <ol>
             {activeModule.requirements.map((requirement) => (
@@ -245,11 +251,10 @@ function App() {
             ))}
           </ol>
 
-          <div className="coverage-placeholder" aria-label="Coverage placeholder">
-            <span>Automation coverage</span>
-            <strong>Not measured yet</strong>
-            <p>This area will display results from the separate Playwright project.</p>
-          </div>
+          <section className="testing-approach" aria-labelledby="testing-approach-title">
+            <h2 id="testing-approach-title">Testing approach</h2>
+            <p>{activeModule.testingApproach}</p>
+          </section>
         </section>
 
         <section className="module-panel" aria-label={`${activeModule.label} module`}>
