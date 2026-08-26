@@ -64,7 +64,7 @@
   border-right: 1px solid var(--border);
 }
 
-.eyebrow,
+.requirements-panel h1,
 .placeholder p {
   margin: 0 0 0.75rem;
   color: var(--accent);
@@ -92,21 +92,15 @@
   line-height: 1.6;
 }
 
-.testing-approach {
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  display: grid;
-  gap: 0.75rem;
-}
-
-.testing-approach h2 {
+.requirements-panel h2 {
   margin: 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
   font-size: 1.1rem;
 }
 
-.testing-approach p {
-  margin: 0;
+.requirements-panel p {
+  margin: 0.75rem 0 0;
   color: var(--muted);
   line-height: 1.5;
 }

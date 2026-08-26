@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import './App.css'
 
 type ModuleId = 'stopwatch' | 'alarms' | 'timers' | 'world-clock'
@@ -9,6 +10,8 @@ type ClockModule = {
   requirements: string[]
   testingApproach: string
 }
+
+const notesBaseUrl = 'https://raw.githubusercontent.com/LuisOspina/clock-notes/main'
 
 const modules: ClockModule[] = [
   {
@@ -66,6 +69,44 @@ function formatTime(milliseconds: number) {
 
 function formatLapNumber(number: number) {
   return String(number).padStart(2, '0')
+}
+
+function getFallbackNotes(module: ClockModule) {
+  const requirements = module.requirements
+    .map((requirement, index) => `${index + 1}. ${requirement}`)
+    .join('\n')
+
+  return `# Functional requirements\n\n${requirements}\n\n## Testing approach\n\n${module.testingApproach}`
+}
+
+function NotesPanel({ module }: { module: ClockModule }) {
+  const [notes, setNotes] = useState(() => getFallbackNotes(module))
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    fetch(`${notesBaseUrl}/${module.id}.md`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error('Notes could not be loaded')
+        }
+
+        return response.text()
+      })
+      .then(setNotes)
+      .catch(() => {})
+
+    return () => controller.abort()
+  }, [module])
+
+  return (
+    <section className="requirements-panel" aria-label="Requirements and testing notes">
+      <ReactMarkdown>{notes}</ReactMarkdown>
+    </section>
+  )
 }
 
 function Stopwatch() {
@@ -240,22 +281,7 @@ function App() {
       </header>
 
       <main id="main" className="app-main">
-        <section className="requirements-panel" aria-labelledby="requirements-title">
-          <h1 id="requirements-title" className="eyebrow">
-            Functional requirements
-          </h1>
-
-          <ol>
-            {activeModule.requirements.map((requirement) => (
-              <li key={requirement}>{requirement}</li>
-            ))}
-          </ol>
-
-          <section className="testing-approach" aria-labelledby="testing-approach-title">
-            <h2 id="testing-approach-title">Testing approach</h2>
-            <p>{activeModule.testingApproach}</p>
-          </section>
-        </section>
+        <NotesPanel key={activeModule.id} module={activeModule} />
 
         <section className="module-panel" aria-label={`${activeModule.label} module`}>
           <div hidden={activeModuleId !== 'stopwatch'}>
