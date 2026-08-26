@@ -1,15 +1,33 @@
 # Clock App
 
-A test-focused recreation of a phone Clock app using FastAPI, Streamlit, and pytest.
+A minimal clock interface built as a stable target for a separate Playwright automation project.
 
-## Planned features
+## Current scope
 
-- Stopwatch
-- World Clock
-- Timers
-- Alarms
+- A working stopwatch with start, stop, resume, reset, and laps
+- Functional requirements displayed beside the selected module
+- Placeholders for Alarms, Timers, and World Clock
+- Semantic controls and stable identifiers for automated testing
 
-## Project structure
+## Stack
 
-- `backend`: FastAPI API, business logic, and automated tests
-- `frontend`: Streamlit user interface
+- React
+- TypeScript
+- Vite
+- Plain CSS
+- AWS Amplify Hosting
+
+## Local development
+
+```powershell
+pnpm install
+pnpm dev
+```
+
+## Production build
+
+```powershell
+pnpm build
+```
+
+The app has no backend, database, authentication, or production test suite. Automated testing will live in a separate repository.
