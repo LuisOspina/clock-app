@@ -85,7 +85,7 @@ function NotesPanel({ module }: { module: ClockModule }) {
   useEffect(() => {
     const controller = new AbortController()
 
-    fetch(`${notesBaseUrl}/${module.id}.md`, {
+    fetch(`${notesBaseUrl}/${module.id}.md?updated=${Date.now()}`, {
       cache: 'no-store',
       signal: controller.signal,
     })
