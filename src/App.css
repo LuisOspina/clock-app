@@ -443,6 +443,8 @@
 }
 
 .city-list {
+  min-height: 0;
+  flex: 1 1 auto;
   display: grid;
   gap: 0.75rem;
   margin-top: 0.75rem;
@@ -473,6 +475,17 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.timer-finished {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(7 89 184 / 20%);
+}
+
+.timer-finished .reset-action {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 .timer-card button,
@@ -683,7 +696,8 @@
 
 .add-alarm {
   flex: 0 0 auto;
-  width: 100%;
+  align-self: center;
+  width: min(100%, 23rem);
   min-height: 3.5rem;
   margin-top: auto;
   border: 1px solid var(--accent);
@@ -804,8 +818,21 @@ button:disabled {
 }
 
 .dialog-actions .delete-action {
-  border-color: #b13b3b;
-  color: #8d2222;
+  border-color: #9f2d2d;
+  background: #b13b3b;
+  color: #fff;
+}
+
+.timer-card .delete-action {
+  border-color: #9f2d2d;
+  background: #b13b3b;
+  color: #fff;
+}
+
+.timer-list .empty-state,
+.city-list .empty-state {
+  margin: auto;
+  align-self: center;
 }
 
 .alarm-popup {
