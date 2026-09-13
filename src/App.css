@@ -432,9 +432,14 @@
 }
 
 .world-clock-fixed {
+  position: sticky;
+  z-index: 1;
+  top: 0;
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
   gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  background: var(--background);
 }
 
 .city-list {
