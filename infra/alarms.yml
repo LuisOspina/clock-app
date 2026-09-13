@@ -1,0 +1,294 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Shared alarms API for clock-app
+
+Parameters:
+  AllowedOrigins:
+    Type: CommaDelimitedList
+    Default: https://d1olg5zyqlqlzy.amplifyapp.com,https://clock.luisospina.ca,http://localhost:5173
+
+Resources:
+  ClockUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub '${AWS::StackName}-users'
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      MfaConfiguration: 'OFF'
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+
+  ClockAdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: clock-admin
+      UserPoolId: !Ref ClockUserPool
+
+  ClockResourceServer:
+    Type: AWS::Cognito::UserPoolResourceServer
+    Properties:
+      Identifier: clock-api
+      Name: Clock API
+      UserPoolId: !Ref ClockUserPool
+      Scopes:
+        - ScopeName: read
+          ScopeDescription: Read Clock API data
+        - ScopeName: write
+          ScopeDescription: Change Clock API data
+
+  ClockDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub '${AWS::StackName}-${AWS::AccountId}'
+      UserPoolId: !Ref ClockUserPool
+
+  ClockUiClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: ClockResourceServer
+    Properties:
+      ClientName: clock-browser
+      UserPoolId: !Ref ClockUserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      ExplicitAuthFlows: [ALLOW_USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [code]
+      AllowedOAuthScopes: [openid, email, profile, clock-api/read, clock-api/write]
+      CallbackURLs: [https://clock.luisospina.ca, http://localhost:5173]
+      LogoutURLs: [https://clock.luisospina.ca, http://localhost:5173]
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+
+  ClockApiTestClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn: ClockResourceServer
+    Properties:
+      ClientName: clock-playwright-api
+      UserPoolId: !Ref ClockUserPool
+      GenerateSecret: true
+      PreventUserExistenceErrors: ENABLED
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthFlows: [client_credentials]
+      AllowedOAuthScopes: [clock-api/read, clock-api/write]
+      AccessTokenValidity: 1
+      TokenValidityUnits:
+        AccessToken: hours
+
+  AlarmTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: id
+          AttributeType: N
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: id
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+
+  AlarmFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: alarm-data
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:DeleteItem, dynamodb:Query]
+                Resource: !GetAtt AlarmTable.Arn
+              - Effect: Allow
+                Action: [logs:CreateLogGroup, logs:CreateLogStream, logs:PutLogEvents]
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${AWS::StackName}-alarms:*'
+
+  AlarmFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub '${AWS::StackName}-alarms'
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Role: !GetAtt AlarmFunctionRole.Arn
+      Timeout: 15
+      MemorySize: 256
+      Environment:
+        Variables:
+          ALARM_TABLE: !Ref AlarmTable
+          CLOCK_ADMIN_GROUP: clock-admin
+          API_TEST_CLIENT_ID: !Ref ClockApiTestClient
+      Code:
+        ZipFile: |
+          const { DynamoDBClient, QueryCommand, GetItemCommand, PutItemCommand, UpdateItemCommand, DeleteItemCommand, TransactWriteItemsCommand } = require('@aws-sdk/client-dynamodb');
+          const db = new DynamoDBClient({});
+          const table = process.env.ALARM_TABLE;
+          const allowed = (event) => { const claims = event.requestContext.authorizer?.jwt?.claims ?? {}; const groups = String(claims['cognito:groups'] ?? '').match(/[A-Za-z0-9_-]+/g) ?? []; return groups.includes(process.env.CLOCK_ADMIN_GROUP) || claims.client_id === process.env.API_TEST_CLIENT_ID; };
+          const json = (statusCode, body) => ({ statusCode, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+          const read = (item) => item && ({ id: Number(item.id.N), hour: Number(item.hour.N), minute: Number(item.minute.N), days: item.days.L.map((x) => Number(x.N)), name: item.name.S, enabled: item.enabled.BOOL, timeZone: item.timeZone.S });
+          const valid = (alarm) => alarm && Number.isInteger(alarm.hour) && alarm.hour >= 0 && alarm.hour <= 23 && Number.isInteger(alarm.minute) && alarm.minute >= 0 && alarm.minute <= 59 && Array.isArray(alarm.days) && alarm.days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6) && typeof alarm.name === 'string' && alarm.name.length <= 20 && typeof alarm.enabled === 'boolean' && typeof alarm.timeZone === 'string' && alarm.timeZone.length <= 100;
+          const item = (id, alarm) => ({ pk: { S: 'ALARM' }, id: { N: String(id) }, hour: { N: String(alarm.hour) }, minute: { N: String(alarm.minute) }, days: { L: alarm.days.map((d) => ({ N: String(d) })) }, name: { S: alarm.name }, enabled: { BOOL: alarm.enabled }, timeZone: { S: alarm.timeZone } });
+          const openApi = (serverUrl) => ({
+            openapi: '3.0.3',
+            info: { title: 'Clock Alarms API', version: '1.0.0', description: 'Shared alarms CRUD API using the bundled default sound.' },
+            servers: [{ url: serverUrl }],
+            paths: {
+              '/alarms': { get: { summary: 'List alarms', responses: { 200: { description: 'Alarm list' }, 429: { description: 'Rate limit reached' }, 500: { description: 'Unexpected failure' } } }, post: { summary: 'Create an alarm', responses: { 201: { description: 'Alarm created' }, 400: { description: 'Invalid alarm' }, 409: { description: 'Alarm limit or creation conflict' }, 429: { description: 'Rate limit reached' }, 500: { description: 'Unexpected failure' } } } },
+              '/alarms/{id}': { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } }], put: { summary: 'Update an alarm', responses: { 200: { description: 'Alarm updated' }, 400: { description: 'Invalid alarm' }, 404: { description: 'Alarm not found' }, 429: { description: 'Rate limit reached' }, 500: { description: 'Unexpected failure' } } }, delete: { summary: 'Delete an alarm', responses: { 204: { description: 'Alarm deleted' }, 400: { description: 'Invalid alarm id' }, 404: { description: 'Alarm not found' }, 429: { description: 'Rate limit reached' }, 500: { description: 'Unexpected failure' } } } },
+              '/openapi.json': { get: { summary: 'Get this OpenAPI document', responses: { 200: { description: 'OpenAPI document' }, 429: { description: 'Rate limit reached' } } } },
+            },
+            components: { schemas: { AlarmInput: { type: 'object', required: ['hour', 'minute', 'days', 'name', 'enabled', 'timeZone'], properties: { hour: { type: 'integer', minimum: 0, maximum: 23 }, minute: { type: 'integer', minimum: 0, maximum: 59 }, days: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 6 } }, name: { type: 'string', maxLength: 20 }, enabled: { type: 'boolean' }, timeZone: { type: 'string', maxLength: 100 } } }, Alarm: { allOf: [{ $ref: '#/components/schemas/AlarmInput' }, { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } }] }, AlarmEnvelope: { type: 'object', properties: { alarm: { $ref: '#/components/schemas/Alarm' } } }, AlarmList: { type: 'object', properties: { alarms: { type: 'array', items: { $ref: '#/components/schemas/Alarm' } } } } } },
+          });
+          const documentedApi = (serverUrl) => openApi(serverUrl);
+          exports.handler = async (event) => {
+            const method = event.requestContext.http.method;
+            const path = event.rawPath;
+            const alarmPath = path.match(/^\/alarms\/(\d+)$/);
+            const id = alarmPath ? Number(alarmPath[1]) : Number.NaN;
+            let body = {}; try { body = event.body ? JSON.parse(event.body) : {}; } catch { return json(400, { message: 'Invalid JSON' }); }
+            if (method === 'GET' && path === '/openapi.json') return json(200, documentedApi(`https://${event.requestContext.domainName}`));
+            if (method === 'OPTIONS') return { statusCode: 204, headers: {} };
+            if (!allowed(event)) return json(403, { message: 'Forbidden' });
+            if (method === 'GET' && path === '/alarms') {
+              const result = await db.send(new QueryCommand({ TableName: table, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': { S: 'ALARM' } }, ConsistentRead: true }));
+              return json(200, { alarms: result.Items.map(read) });
+            }
+            if (method === 'POST' && path === '/alarms') {
+              if (!valid(body)) return json(400, { message: 'Invalid alarm' });
+              for (let attempt = 0; attempt < 3; attempt += 1) {
+                try {
+                  const counter = await db.send(new GetItemCommand({ TableName: table, Key: { pk: { S: 'COUNTER' }, id: { N: '0' } }, ConsistentRead: true }));
+                  const currentNext = Number(counter.Item?.next?.N ?? 0);
+                  const currentCount = Number(counter.Item?.count?.N ?? 0);
+                  if (currentCount >= 10) return json(409, { message: 'Maximum of 10 alarms has been reached.' });
+                  const nextId = currentNext + 1;
+                  await db.send(new TransactWriteItemsCommand({ TransactItems: [
+                    { Update: { TableName: table, Key: { pk: { S: 'COUNTER' }, id: { N: '0' } }, UpdateExpression: 'SET #next = :next, #count = :count', ConditionExpression: 'attribute_not_exists(#next) OR (#next = :currentNext AND #count = :currentCount)', ExpressionAttributeNames: { '#next': 'next', '#count': 'count' }, ExpressionAttributeValues: { ':next': { N: String(nextId) }, ':count': { N: String(currentCount + 1) }, ':currentNext': { N: String(currentNext) }, ':currentCount': { N: String(currentCount) } } } },
+                    { Put: { TableName: table, Item: item(nextId, body), ConditionExpression: 'attribute_not_exists(pk)' } },
+                  ] }));
+                  return json(201, { alarm: { ...body, id: nextId } });
+                } catch (error) {
+                  if (error.name !== 'TransactionCanceledException') return json(500, { message: 'Could not create alarm' });
+                }
+              }
+              return json(409, { message: 'Alarm creation conflicted. Please retry.' });
+            }
+            if (method === 'PUT' && Number.isInteger(id)) {
+              if (!Number.isInteger(id) || !valid(body)) return json(400, { message: 'Invalid alarm' });
+              try { await db.send(new PutItemCommand({ TableName: table, Item: item(id, body), ConditionExpression: 'attribute_exists(pk)' })); return json(200, { alarm: { ...body, id } }); } catch (error) { return error.name === 'ConditionalCheckFailedException' ? json(404, { message: 'Alarm not found' }) : json(500, { message: 'Could not update alarm' }); }
+            }
+            if (method === 'DELETE' && Number.isInteger(id)) {
+              if (!Number.isInteger(id)) return json(400, { message: 'Invalid alarm id' });
+              try {
+              await db.send(new TransactWriteItemsCommand({ TransactItems: [
+                { Delete: { TableName: table, Key: { pk: { S: 'ALARM' }, id: { N: String(id) } }, ConditionExpression: 'attribute_exists(pk)' } },
+                { Update: { TableName: table, Key: { pk: { S: 'COUNTER' }, id: { N: '0' } }, UpdateExpression: 'ADD #count :minus', ConditionExpression: 'attribute_exists(#count) AND #count > :zero', ExpressionAttributeNames: { '#count': 'count' }, ExpressionAttributeValues: { ':minus': { N: '-1' }, ':zero': { N: '0' } } } },
+              ] }));
+              return { statusCode: 204, headers: {} };
+              } catch (error) { return error.name === 'TransactionCanceledException' ? json(404, { message: 'Alarm not found' }) : json(500, { message: 'Could not delete alarm' }); }
+            }
+            return json(404, { message: 'Route not found' });
+          };
+
+  AlarmApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub '${AWS::StackName}-alarms'
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowCredentials: false
+        AllowHeaders: [content-type, authorization]
+        AllowMethods: [GET, POST, PUT, DELETE]
+        AllowOrigins: !Ref AllowedOrigins
+
+  AlarmIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref AlarmApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt AlarmFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  AlarmAuthorizer:
+    Type: AWS::ApiGatewayV2::Authorizer
+    Properties:
+      ApiId: !Ref AlarmApi
+      Name: clock-cognito
+      AuthorizerType: JWT
+      IdentitySource: ['$request.header.Authorization']
+      JwtConfiguration:
+        Audience: [!Ref ClockUiClient, !Ref ClockApiTestClient]
+        Issuer: !Sub 'https://cognito-idp.${AWS::Region}.amazonaws.com/${ClockUserPool}'
+
+  AlarmRoutes:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref AlarmApi
+      RouteKey: '$default'
+      AuthorizationType: JWT
+      AuthorizerId: !Ref AlarmAuthorizer
+      Target: !Join ['/', [integrations, !Ref AlarmIntegration]]
+
+  AlarmOptionsRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref AlarmApi
+      RouteKey: 'OPTIONS /{proxy+}'
+      AuthorizationType: NONE
+      Target: !Join ['/', [integrations, !Ref AlarmIntegration]]
+
+  AlarmOpenApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref AlarmApi
+      RouteKey: 'GET /openapi.json'
+      AuthorizationType: NONE
+      Target: !Join ['/', [integrations, !Ref AlarmIntegration]]
+
+  AlarmStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref AlarmApi
+      StageName: '$default'
+      AutoDeploy: true
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+
+  AlarmInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref AlarmFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:${AWS::Partition}:execute-api:${AWS::Region}:${AWS::AccountId}:${AlarmApi}/*'
+
+Outputs:
+  AlarmApiUrl:
+    Value: !GetAtt AlarmApi.ApiEndpoint
+  ClockUserPoolId:
+    Value: !Ref ClockUserPool
+  ClockUiClientId:
+    Value: !Ref ClockUiClient
+  ClockApiTestClientId:
+    Value: !Ref ClockApiTestClient
+  ClockCognitoDomain:
+    Value: !Sub '${ClockDomain}.auth.${AWS::Region}.amazoncognito.com'

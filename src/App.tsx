@@ -1,299 +1,84 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { authConfigured, loadTokens, refreshTokens, signInWithPassword, type AuthTokens } from './auth'
 import './App.css'
 
 type ModuleId = 'stopwatch' | 'alarms' | 'timers' | 'world-clock'
-
-type ClockModule = {
-  id: ModuleId
-  label: string
-  requirements: string[]
-  testingApproach: string
-}
+type ViewId = 'home' | 'apis' | ModuleId
+type Alarm = { id: number; hour: number; minute: number; days: number[]; name: string; enabled: boolean; timeZone: string }
+type ClockModule = { id: ModuleId; label: string; requirements: string[]; testingApproach: string }
 
 const notesBaseUrl = 'https://api.github.com/repos/LuisOspina/clock-notes/contents'
-
+const defaultSoundUrl = '/sounds/default-alarm.mp3'
+const alarmsApiUrl = import.meta.env.VITE_ALARMS_API_URL
+const SwaggerUI = lazy(async () => { await import('swagger-ui-react/swagger-ui.css'); return import('swagger-ui-react') })
+const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const allDays = [0, 1, 2, 3, 4, 5, 6]
 const modules: ClockModule[] = [
-  {
-    id: 'stopwatch',
-    label: 'Stopwatch',
-    requirements: [
-      'The initial time is 00:00.00 and only the Start button is visible.',
-      'Start begins the timer, changes Start to Stop, and reveals Reset and Lap.',
-      'Stop freezes the main timer and active lap timer, and hides Lap.',
-      'Start resumes a stopped timer without clearing its elapsed time or laps.',
-      'Reset returns the timer to 00:00.00 and clears every lap.',
-      'The first Lap records lap 01 and begins a live lap 02.',
-      'Each additional Lap freezes the active lap and begins the next one.',
-      'The lap list is horizontally scrollable and shows three cards at a time.',
-    ],
-    testingApproach: 'Add your Stopwatch testing notes here as you work through them.',
-  },
-  {
-    id: 'alarms',
-    label: 'Alarms',
-    requirements: [
-      'This module is a placeholder in the first release.',
-      'Alarm creation, repetition, snoozing, and next-trigger logic are not implemented yet.',
-    ],
-    testingApproach: 'Testing notes will be added when this module is implemented.',
-  },
-  {
-    id: 'timers',
-    label: 'Timers',
-    requirements: [
-      'This module is a placeholder in the first release.',
-      'Countdown creation, pausing, resuming, and completion alerts are not implemented yet.',
-    ],
-    testingApproach: 'Testing notes will be added when this module is implemented.',
-  },
-  {
-    id: 'world-clock',
-    label: 'World Clock',
-    requirements: [
-      'This module is a placeholder in the first release.',
-      'City selection, time-zone conversion, and daylight-saving behavior are not implemented yet.',
-    ],
-    testingApproach: 'Testing notes will be added when this module is implemented.',
-  },
+  { id: 'stopwatch', label: 'Stopwatch', requirements: ['The initial time is 00:00.00 and only the Start button is visible.', 'Start begins the timer, changes Start to Stop, and reveals Reset and Lap.', 'Stop freezes the main timer and active lap timer, and hides Lap.', 'Start resumes a stopped timer without clearing its elapsed time or laps.', 'Reset returns the timer to 00:00.00 and clears every lap.', 'The first Lap records lap 01 and begins a live lap 02.', 'Each additional Lap freezes the active lap and begins the next one.', 'The lap list is horizontally scrollable and shows three cards at a time.'], testingApproach: 'Add your Stopwatch testing notes here as you work through them.' },
+  { id: 'alarms', label: 'Alarms', requirements: ['Create up to 10 shared alarms.', 'Alarms use the saver’s local time zone and stay correct through daylight-saving changes.', 'An alarm can repeat on selected days, play the default sound, and be enabled or dismissed.', 'The app must remain open for an alarm popup and sound to occur.'], testingApproach: 'Use each alarm card’s data-alarm-id attribute for stable automation targeting.' },
+  { id: 'timers', label: 'Timers', requirements: ['This module is a placeholder in the first release.', 'Countdown creation, pausing, resuming, and completion alerts are not implemented yet.'], testingApproach: 'Testing notes will be added when this module is implemented.' },
+  { id: 'world-clock', label: 'World Clock', requirements: ['This module is a placeholder in the first release.', 'City selection, time-zone conversion, and daylight-saving behavior are not implemented yet.'], testingApproach: 'Testing notes will be added when this module is implemented.' },
 ]
 
-function formatTime(milliseconds: number) {
-  const safeMilliseconds = Math.max(0, milliseconds)
-  const minutes = Math.floor(safeMilliseconds / 60_000)
-  const seconds = Math.floor((safeMilliseconds % 60_000) / 1_000)
-  const hundredths = Math.floor((safeMilliseconds % 1_000) / 10)
-
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(hundredths).padStart(2, '0')}`
-}
-
-function formatLapNumber(number: number) {
-  return String(number).padStart(2, '0')
-}
-
-function getFallbackNotes(module: ClockModule) {
-  const requirements = module.requirements
-    .map((requirement, index) => `${index + 1}. ${requirement}`)
-    .join('\n')
-
-  return `# Functional requirements\n\n${requirements}\n\n## Testing approach\n\n${module.testingApproach}`
-}
+function formatTime(milliseconds: number) { const value = Math.max(0, milliseconds); return `${String(Math.floor(value / 60_000)).padStart(2, '0')}:${String(Math.floor((value % 60_000) / 1_000)).padStart(2, '0')}.${String(Math.floor((value % 1_000) / 10)).padStart(2, '0')}` }
+function formatAlarmTime(hour: number, minute: number) { return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}` }
+function getFallbackNotes(module: ClockModule) { return `# Functional requirements\n\n${module.requirements.map((item, index) => `${index + 1}. ${item}`).join('\n')}\n\n## Testing approach\n\n${module.testingApproach}` }
+function getDaysText(days: number[]) { if (days.length === 7) return 'Every day'; if (days.length === 5 && [1, 2, 3, 4, 5].every((day) => days.includes(day))) return 'Weekdays'; if (days.length === 2 && days.includes(0) && days.includes(6)) return 'Weekends'; return days.slice().sort((a, b) => a - b).map((day) => dayNames[day]).join(', ') }
+function currentTimeZone() { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }
+function dateParts(date: Date, timeZone: string) { const parts = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(date); const value = (name: string) => Number(parts.find((part) => part.type === name)?.value); return { year: value('year'), month: value('month'), day: value('day'), hour: value('hour'), minute: value('minute') } }
+function zonedDate(year: number, month: number, day: number, hour: number, minute: number, timeZone: string) { const target = Date.UTC(year, month - 1, day, hour, minute); let result = new Date(target); for (let index = 0; index < 2; index += 1) { const actual = dateParts(result, timeZone); result = new Date(result.getTime() + target - Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute)) } return result }
+function nextAlarmDate(alarm: Alarm, now = new Date()) { const local = dateParts(now, alarm.timeZone); for (let offset = 0; offset < 8; offset += 1) { const sourceDate = new Date(Date.UTC(local.year, local.month - 1, local.day + offset)); if (!alarm.days.includes(sourceDate.getUTCDay())) continue; const candidate = zonedDate(sourceDate.getUTCFullYear(), sourceDate.getUTCMonth() + 1, sourceDate.getUTCDate(), alarm.hour, alarm.minute, alarm.timeZone); if (candidate > now) return candidate } return null }
+function localAlarmTime(alarm: Alarm) { const next = nextAlarmDate(alarm); return next ? new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(next) : formatAlarmTime(alarm.hour, alarm.minute) }
+function alarmOccurrenceKey(alarm: Alarm, now = new Date()) { const clock = dateParts(now, alarm.timeZone); return `${alarm.id}-${clock.year}-${clock.month}-${clock.day}-${clock.hour}-${clock.minute}` }
+function alarmIsDue(alarm: Alarm, now = new Date()) { const clock = dateParts(now, alarm.timeZone); const day = new Date(Date.UTC(clock.year, clock.month - 1, clock.day)).getUTCDay(); return alarm.enabled && alarm.days.includes(day) && alarm.hour === clock.hour && alarm.minute === clock.minute }
+function nextHourTime() { const now = new Date(); return { hour: (now.getHours() + 1) % 24, minute: 0 } }
 
 function NotesPanel({ module }: { module: ClockModule }) {
   const [notes, setNotes] = useState(() => getFallbackNotes(module))
-
-  useEffect(() => {
-    const controller = new AbortController()
-
-    fetch(`${notesBaseUrl}/${module.id}.md?ref=main&updated=${Date.now()}`, {
-      cache: 'no-store',
-      headers: { Accept: 'application/vnd.github.raw+json' },
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error('Notes could not be loaded')
-        }
-
-        return response.text()
-      })
-      .then(setNotes)
-      .catch(() => {})
-
-    return () => controller.abort()
-  }, [module])
-
-  return (
-    <section className="requirements-panel" aria-label="Requirements and testing notes">
-      <ReactMarkdown>{notes}</ReactMarkdown>
-    </section>
-  )
+  useEffect(() => { const controller = new AbortController(); fetch(`${notesBaseUrl}/${module.id}.md?ref=main&updated=${Date.now()}`, { cache: 'no-store', headers: { Accept: 'application/vnd.github.raw+json' }, signal: controller.signal }).then((response) => response.ok ? response.text() : Promise.reject()).then(setNotes).catch(() => {}); return () => controller.abort() }, [module])
+  return <section className="requirements-panel" aria-label="Requirements and testing notes"><ReactMarkdown>{notes}</ReactMarkdown></section>
 }
 
-function Stopwatch() {
-  const [elapsedBeforeStart, setElapsedBeforeStart] = useState(0)
-  const [startedAt, setStartedAt] = useState<number | null>(null)
-  const [displayElapsed, setDisplayElapsed] = useState(0)
-  const [lapTotals, setLapTotals] = useState<number[]>([])
-  const lapList = useRef<HTMLDivElement>(null)
-  const isRunning = startedAt !== null
-
-  useEffect(() => {
-    if (startedAt === null) {
-      return
-    }
-
-    let animationFrame = 0
-
-    const updateTime = () => {
-      setDisplayElapsed(elapsedBeforeStart + performance.now() - startedAt)
-      animationFrame = requestAnimationFrame(updateTime)
-    }
-
-    animationFrame = requestAnimationFrame(updateTime)
-
-    return () => cancelAnimationFrame(animationFrame)
-  }, [elapsedBeforeStart, startedAt])
-
-  const laps = useMemo(() => {
-    const completedLaps = lapTotals.map((total, index) => ({
-      number: index + 1,
-      lapTime: total - (lapTotals[index - 1] ?? 0),
-      totalTime: total,
-    }))
-
-    if (lapTotals.length === 0) {
-      return completedLaps
-    }
-
-    return [
-      ...completedLaps,
-      {
-        number: lapTotals.length + 1,
-        lapTime: displayElapsed - lapTotals[lapTotals.length - 1],
-        totalTime: displayElapsed,
-      },
-    ]
-  }, [displayElapsed, lapTotals])
-
-  useEffect(() => {
-    lapList.current?.scrollTo({ left: lapList.current.scrollWidth })
-  }, [laps.length])
-
-  const start = () => {
-    if (!isRunning) {
-      setStartedAt(performance.now())
-    }
-  }
-
-  const stop = () => {
-    if (startedAt === null) {
-      return
-    }
-
-    const elapsed = elapsedBeforeStart + performance.now() - startedAt
-    setElapsedBeforeStart(elapsed)
-    setDisplayElapsed(elapsed)
-    setStartedAt(null)
-  }
-
-  const reset = () => {
-    setElapsedBeforeStart(0)
-    setDisplayElapsed(0)
-    setStartedAt(null)
-    setLapTotals([])
-  }
-
-  const addLap = () => {
-    if (startedAt === null) {
-      return
-    }
-
-    const elapsed = elapsedBeforeStart + performance.now() - startedAt
-    setDisplayElapsed(elapsed)
-    setLapTotals((currentLaps) => [...currentLaps, elapsed])
-  }
-
-  return (
-    <section className="stopwatch" aria-labelledby="stopwatch-title">
-      <h2 id="stopwatch-title">Stopwatch</h2>
-
-      <output
-        className="stopwatch-time"
-        aria-label="Elapsed time"
-        data-testid="stopwatch-time"
-        role="timer"
-      >
-        {formatTime(displayElapsed)}
-      </output>
-
-      {laps.length > 0 && (
-        <div className="lap-list" aria-label="Laps" ref={lapList}>
-          {laps.map((lap) => {
-            const lapNumber = formatLapNumber(lap.number)
-
-            return (
-              <article
-                className="lap-card"
-                data-testid={`lap-card-${lapNumber}`}
-                key={lap.number}
-              >
-                <strong>{lapNumber}</strong>
-                <output aria-label={`Lap ${lapNumber} time`}>
-                  {formatTime(lap.lapTime)}
-                </output>
-                <output aria-label={`Lap ${lapNumber} total time`}>
-                  {formatTime(lap.totalTime)}
-                </output>
-              </article>
-            )
-          })}
-        </div>
-      )}
-
-      <div className="stopwatch-actions">
-        <button className="primary-action" onClick={isRunning ? stop : start}>
-          {isRunning ? 'Stop' : 'Start'}
-        </button>
-
-        {(isRunning || displayElapsed > 0) && (
-          <div className="secondary-actions">
-            <button onClick={reset}>Reset</button>
-            {isRunning && <button onClick={addLap}>Lap</button>}
-          </div>
-        )}
-      </div>
-    </section>
-  )
+function AlarmDialog({ alarm, onClose, onSave, onDelete }: { alarm: Alarm | null; onClose: () => void; onSave: (alarm: Alarm) => void; onDelete?: () => void }) {
+  const zone = currentTimeZone()
+  const [hour, setHour] = useState(() => String(alarm?.hour ?? nextHourTime().hour).padStart(2, '0')); const [minute, setMinute] = useState(() => String(alarm?.minute ?? nextHourTime().minute).padStart(2, '0')); const [days, setDays] = useState<number[]>(alarm?.days ?? allDays); const [name, setName] = useState((alarm?.name ?? '').slice(0, 20))
+  const parsedHour = Number(hour); const parsedMinute = Number(minute); const validTime = /^\d{1,2}$/.test(hour) && parsedHour >= 0 && parsedHour <= 23 && /^\d{1,2}$/.test(minute) && parsedMinute >= 0 && parsedMinute <= 59
+  const save = () => { if (validTime) onSave({ id: alarm?.id ?? 0, hour: parsedHour, minute: parsedMinute, days, name: name.trim(), enabled: days.length > 0, timeZone: zone }) }
+  return <div className="dialog-backdrop"><section className="alarm-dialog" role="dialog" aria-modal="true" aria-labelledby="alarm-dialog-title"><h2 id="alarm-dialog-title">{alarm ? 'Edit alarm' : 'Add alarm'}</h2><div className="form-row"><label>Time</label><div className="time-fields"><input aria-label="Hour" value={hour} inputMode="numeric" maxLength={2} placeholder="hh" onChange={(event) => setHour(event.target.value.replace(/\D/g, ''))} /><span>:</span><input aria-label="Minute" value={minute} inputMode="numeric" maxLength={2} placeholder="mm" onChange={(event) => setMinute(event.target.value.replace(/\D/g, ''))} /></div></div>{!validTime && <p className="form-warning">Use an hour from 0–23 and a minute from 0–59.</p>}<div className="form-row"><span>Days</span><div className="day-buttons" aria-label="Alarm days">{dayNames.map((day, index) => <button className={days.includes(index) ? 'selected' : ''} type="button" key={day} aria-pressed={days.includes(index)} onClick={() => setDays((current) => current.includes(index) ? current.filter((value) => value !== index) : [...current, index])}>{day[0]}</button>)}</div></div>{days.length === 0 && <p className="form-warning">No days are selected. This alarm will be disabled until you select a day.</p>}<div className="form-row"><label htmlFor="alarm-name">Name</label><input id="alarm-name" value={name} maxLength={20} placeholder="Optional" onChange={(event) => setName(event.target.value)} /></div><div className="form-row"><span>Sound</span><output>Default alarm sound</output></div><div className="form-row"><span>Saved time zone</span><output>{alarm?.timeZone ?? zone}</output></div>{alarm && alarm.timeZone !== zone && <p className="form-warning">You are editing from {zone}. Saving applies this time in your local time zone.</p>}<div className="dialog-actions">{onDelete && <button className="delete-action" type="button" onClick={onDelete}>Delete</button>}<span /><button type="button" onClick={onClose}>Cancel</button><button className="primary-action" type="button" onClick={save} disabled={!validTime}>{alarm ? 'Save' : 'Add'}</button></div></section></div>
 }
 
-function Placeholder({ module }: { module: ClockModule }) {
-  return (
-    <section className="placeholder" aria-labelledby={`${module.id}-title`}>
-      <p>Coming later</p>
-      <h2 id={`${module.id}-title`}>{module.label}</h2>
-      <span>This module is intentionally a placeholder.</span>
-    </section>
-  )
+function Alarms({ accessToken }: { accessToken?: string }) {
+  const [alarms, setAlarms] = useState<Alarm[]>([]); const [editing, setEditing] = useState<Alarm | null | undefined>(undefined); const [ringing, setRinging] = useState<Alarm | null>(null); const [error, setError] = useState(''); const audio = useRef<HTMLAudioElement>(null); const handledOccurrences = useRef(new Set<string>()); const configurationError = alarmsApiUrl ? '' : 'Alarm API configuration is missing.'
+  const request = async (path: string, options?: RequestInit) => { const response = await fetch(`${alarmsApiUrl}${path}`, { ...options, headers: { ...(options?.body ? { 'content-type': 'application/json' } : {}), ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) } }); if (!response.ok) { const result = await response.json().catch(() => ({})); throw new Error(response.status === 401 ? 'Sign in to manage alarms.' : result.message || 'The alarm request failed.') }; return response.status === 204 ? undefined : response.json() }
+  useEffect(() => { if (!alarmsApiUrl) return; request('/alarms').then((result) => setAlarms(result.alarms)).catch((reason: Error) => setError(reason.message)) }, [accessToken])
+  const save = async (next: Alarm) => { try { setError(''); const saved: Alarm = next.id === 0 ? (await request('/alarms', { method: 'POST', body: JSON.stringify(next) })).alarm : (await request(`/alarms/${next.id}`, { method: 'PUT', body: JSON.stringify(next) })).alarm; handledOccurrences.current.add(alarmOccurrenceKey(saved)); setAlarms((current) => next.id === 0 ? [...current, saved] : current.map((alarm) => alarm.id === saved.id ? saved : alarm)); setEditing(undefined) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not save alarm.') } }
+  const deleteAlarm = async () => { if (!editing) return; try { await request(`/alarms/${editing.id}`, { method: 'DELETE' }); setAlarms((current) => current.filter((alarm) => alarm.id !== editing.id)); setEditing(undefined) } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not delete alarm.') } }
+  const dismiss = (alarm: Alarm) => { handledOccurrences.current.add(alarmOccurrenceKey(alarm)); audio.current?.pause(); setRinging(null) }
+  useEffect(() => { if (ringing && audio.current) { audio.current.currentTime = 0; audio.current.play().catch(() => {}) } }, [ringing])
+  useEffect(() => { const markCurrentOccurrencesHandled = () => { const currentTime = new Date(); alarms.forEach((alarm) => { if (alarmIsDue(alarm, currentTime)) handledOccurrences.current.add(alarmOccurrenceKey(alarm, currentTime)) }) }; const check = () => { const currentTime = new Date(); alarms.forEach((alarm) => { const key = alarmOccurrenceKey(alarm, currentTime); if (alarmIsDue(alarm, currentTime) && !handledOccurrences.current.has(key)) { handledOccurrences.current.add(key); setRinging(alarm) } }) }; markCurrentOccurrencesHandled(); const interval = window.setInterval(check, 1000); return () => window.clearInterval(interval) }, [alarms])
+  return <section className="alarms" aria-labelledby="alarms-title"><h2 id="alarms-title">Alarms</h2><audio ref={audio} src={defaultSoundUrl} loop />{(configurationError || error) && <p className="form-warning">{configurationError || error}</p>}{alarms.length === 0 ? <p className="empty-state">No alarms yet.</p> : <div className="alarm-list">{alarms.map((alarm) => <article className="alarm-card" data-alarm-id={alarm.id} key={alarm.id} onClick={() => setEditing(alarm)}><div><p className="alarm-days">{getDaysText(alarm.days)} {alarm.name && <small>({alarm.name})</small>}</p><time>{localAlarmTime(alarm)}</time><small className="timezone-note">Saved in {alarm.timeZone}</small></div><label onClick={(event) => event.stopPropagation()}><span className="sr-only">Enable alarm {alarm.id}</span><input type="checkbox" checked={alarm.enabled} onChange={(event) => void save({ ...alarm, name: alarm.name.slice(0, 20), enabled: event.target.checked })} /></label></article>)}</div>}<button className="add-alarm" type="button" disabled={alarms.length >= 10} title={alarms.length >= 10 ? 'Maximum of 10 alarms has been reached.' : 'Add an alarm'} onClick={() => setEditing(null)}>Add alarm</button>{editing !== undefined && <AlarmDialog alarm={editing} onClose={() => setEditing(undefined)} onSave={save} onDelete={editing ? () => void deleteAlarm() : undefined} />}{ringing && <div className="dialog-backdrop"><section className="alarm-popup" role="alertdialog" aria-label="Alarm going off"><p>Alarm</p><h2>{localAlarmTime(ringing)}</h2><button className="primary-action" onClick={() => dismiss(ringing)}>Dismiss</button></section></div>}</section>
 }
+
+function Stopwatch() { const [elapsedBeforeStart, setElapsedBeforeStart] = useState(0); const [startedAt, setStartedAt] = useState<number | null>(null); const [displayElapsed, setDisplayElapsed] = useState(0); const [lapTotals, setLapTotals] = useState<number[]>([]); const lapList = useRef<HTMLDivElement>(null); const running = startedAt !== null; useEffect(() => { if (startedAt === null) return; let frame = 0; const update = () => { setDisplayElapsed(elapsedBeforeStart + performance.now() - startedAt); frame = requestAnimationFrame(update) }; frame = requestAnimationFrame(update); return () => cancelAnimationFrame(frame) }, [elapsedBeforeStart, startedAt]); const laps = lapTotals.length ? [...lapTotals, displayElapsed] : []; const stop = () => { if (startedAt === null) return; const elapsed = elapsedBeforeStart + performance.now() - startedAt; setElapsedBeforeStart(elapsed); setDisplayElapsed(elapsed); setStartedAt(null) }; return <section className="stopwatch"><h2>Stopwatch</h2><output className="stopwatch-time" data-testid="stopwatch-time" role="timer">{formatTime(displayElapsed)}</output>{laps.length > 0 && <div className="lap-list" ref={lapList}>{laps.map((total, index) => <article className="lap-card" data-testid={`lap-card-${String(index + 1).padStart(2, '0')}`} key={index}><strong>{String(index + 1).padStart(2, '0')}</strong><output>{formatTime(total - (laps[index - 1] ?? 0))}</output><output>{formatTime(total)}</output></article>)}</div>}<div className="stopwatch-actions"><button className="primary-action" onClick={running ? stop : () => setStartedAt(performance.now())}>{running ? 'Stop' : 'Start'}</button>{(running || displayElapsed > 0) && <div className="secondary-actions"><button onClick={() => { setElapsedBeforeStart(0); setDisplayElapsed(0); setStartedAt(null); setLapTotals([]) }}>Reset</button>{running && <button onClick={() => setLapTotals((current) => [...current, elapsedBeforeStart + performance.now() - (startedAt ?? performance.now())])}>Lap</button>}</div>}</div></section> }
+function Placeholder({ module }: { module: ClockModule }) { return <section className="placeholder"><p>Coming later</p><h2>{module.label}</h2><span>This module is intentionally a placeholder.</span></section> }
+function Home({ showApis }: { showApis: () => void }) { return <section className="home-panel" aria-labelledby="home-title"><p>Clock</p><h1 id="home-title">Your clock workspace</h1><span>Manage time tools today. Test artifacts will appear here when the Playwright reporting integration is connected.</span><div className="home-cards"><article><h2>Latest test run</h2><p>No Playwright artifacts are linked yet.</p></article><article><h2>API reference</h2><p>Browse every alarms endpoint and its request purpose.</p><button className="primary-action" type="button" onClick={showApis}>Open API documentation</button></article></div></section> }
+
+function ApiReference({ accessToken }: { accessToken: string }) { const openApiUrl = alarmsApiUrl ? `${alarmsApiUrl}/openapi.json` : ''; return <section className="api-reference swagger-reference" aria-labelledby="api-reference-title"><p>API documentation</p><h1 id="api-reference-title">Alarms API</h1>{openApiUrl ? <Suspense fallback={<p className="api-note">Loading API documentation…</p>}><SwaggerUI url={openApiUrl} docExpansion="list" tryItOutEnabled={false} defaultModelsExpandDepth={-1} requestInterceptor={(request) => { if (accessToken) request.headers.Authorization = `Bearer ${accessToken}`; return request }} /></Suspense> : <p className="api-note">Alarm API configuration is missing.</p>}</section> }
+
+function ClockApp({ accessToken }: { accessToken: string }) { const [active, setActive] = useState<ViewId>('home'); const activeModule = modules.find((item) => item.id === active); return <div className="app-shell"><header className="app-header"><button className="brand" type="button" onClick={() => setActive('home')}>Clock</button><nav className="header-primary-nav" aria-label="Primary navigation"><button aria-pressed={active === 'apis'} onClick={() => setActive('apis')}>APIs</button></nav><nav className="module-nav" aria-label="Clock modules">{modules.map((item) => <button aria-pressed={active === item.id} key={item.id} onClick={() => setActive(item.id)}>{item.label}</button>)}</nav></header><main id="main" className={activeModule ? 'app-main' : 'app-main single-panel'}>{active === 'home' && <Home showApis={() => setActive('apis')} />}{active === 'apis' && <ApiReference accessToken="" />}{activeModule && <><NotesPanel key={activeModule.id} module={activeModule} /><section className="module-panel">{active === 'stopwatch' && <Stopwatch />}{active === 'alarms' && <Alarms accessToken={accessToken} />}{active !== 'stopwatch' && active !== 'alarms' && <Placeholder module={activeModule} />}</section></>}</main></div> }
 
 function App() {
-  const [activeModuleId, setActiveModuleId] = useState<ModuleId>('stopwatch')
-  const activeModule = modules.find((module) => module.id === activeModuleId) ?? modules[0]
+  const [tokens, setTokens] = useState<AuthTokens | null>(() => loadTokens())
+  const [error, setError] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
 
-  return (
-    <div className="app-shell">
-      <header className="app-header">
-        <a className="brand" href="#main">
-          Clock
-        </a>
+  useEffect(() => { if (!tokens) return; const delay = Math.max(1_000, tokens.expiresAt - Date.now() - 60_000); const timer = window.setTimeout(() => refreshTokens(tokens).then(setTokens).catch(() => setTokens(null)), delay); return () => window.clearTimeout(timer) }, [tokens])
 
-        <nav aria-label="Clock modules">
-          {modules.map((module) => (
-            <button
-              aria-pressed={activeModuleId === module.id}
-              key={module.id}
-              onClick={() => setActiveModuleId(module.id)}
-            >
-              {module.label}
-            </button>
-          ))}
-        </nav>
-      </header>
-
-      <main id="main" className="app-main">
-        <NotesPanel key={activeModule.id} module={activeModule} />
-
-        <section className="module-panel" aria-label={`${activeModule.label} module`}>
-          <div hidden={activeModuleId !== 'stopwatch'}>
-            <Stopwatch />
-          </div>
-
-          {activeModuleId !== 'stopwatch' && <Placeholder module={activeModule} />}
-        </section>
-      </main>
-    </div>
-  )
+  if (!authConfigured) return <section className="placeholder"><p>Configuration required</p><h2>Clock sign-in is not configured.</h2></section>
+  if (window.location.pathname.startsWith('/sign-in')) return <section className="placeholder"><p>Clock</p><h2>Sign in</h2><form onSubmit={(event) => { event.preventDefault(); setLoading(true); setError(''); signInWithPassword(email, password).then(() => window.location.assign('/')).catch((reason: Error) => setError(reason.message)).finally(() => setLoading(false)) }}><input aria-label="Email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" required /><input aria-label="Password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Password" required /><button className="primary-action" type="submit" disabled={loading}>{loading ? 'Signing in…' : 'Sign in'}</button>{error && <span>{error}</span>}</form></section>
+  return <ClockApp accessToken={tokens?.accessToken ?? ''} />
 }
-
 export default App

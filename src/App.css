@@ -1,11 +1,11 @@
 :root {
-  --background: #0f0f10;
-  --panel-light: #1f1f22;
-  --border: #39393d;
-  --text: #f4f1f0;
-  --muted: #aaa6a5;
-  --accent: #ffaaa6;
-  --accent-text: #4d1716;
+  --background: #f5f7fa;
+  --panel-light: #ffffff;
+  --border: #aeb9c7;
+  --text: #162033;
+  --muted: #4a5a6e;
+  --accent: #0759b8;
+  --accent-text: #ffffff;
 }
 
 .app-shell {
@@ -25,10 +25,18 @@
 }
 
 .brand {
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--text);
-  font-size: 1.1rem;
+  font-size: 1.2rem;
   font-weight: 700;
+  font-family: inherit;
   text-decoration: none;
+}
+
+.header-primary-nav {
+  margin-right: auto;
 }
 
 .app-header nav {
@@ -38,7 +46,8 @@
 }
 
 .app-header nav button {
-  padding: 0.65rem 0.85rem;
+  min-height: 2.75rem;
+  padding: 0.65rem 1rem;
   border: 0;
   border-radius: 0.5rem;
   background: transparent;
@@ -47,7 +56,7 @@
 }
 
 .app-header nav button[aria-pressed='true'] {
-  background: var(--panel-light);
+  background: #dbeafe;
   color: var(--text);
 }
 
@@ -56,6 +65,7 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   min-height: 0;
+  overflow: hidden;
 }
 
 .requirements-panel {
@@ -68,7 +78,7 @@
 .placeholder p {
   margin: 0 0 0.75rem;
   color: var(--accent);
-  font-size: 0.75rem;
+  font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
@@ -88,15 +98,15 @@
 .requirements-panel li {
   margin-bottom: 1rem;
   padding-left: 0.5rem;
-  color: #d8d4d3;
-  line-height: 1.6;
+  color: var(--text);
+  line-height: 1.65;
 }
 
 .requirements-panel h2 {
   margin: 0;
   padding-top: 1.5rem;
   border-top: 1px solid var(--border);
-  font-size: 1.1rem;
+  font-size: 1.2rem;
 }
 
 .requirements-panel p {
@@ -108,6 +118,169 @@
 .module-panel {
   min-width: 0;
   overflow: hidden;
+}
+
+.single-panel {
+  display: block;
+  height: calc(100dvh - 4.5rem);
+  overflow-y: auto;
+}
+
+.home-panel,
+.api-reference {
+  box-sizing: border-box;
+  width: min(100%, 68rem);
+  margin: 0 auto;
+  padding: clamp(2rem, 5vw, 5rem);
+}
+
+.home-panel > p,
+.api-reference > p:first-child {
+  margin: 0 0 0.75rem;
+  color: var(--accent);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.home-panel h1,
+.api-reference h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(2.5rem, 6vw, 5rem);
+  line-height: 1;
+}
+
+.home-panel > span,
+.api-reference > code,
+.api-note {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.home-cards,
+.endpoint-list {
+  display: grid;
+  gap: 1rem;
+  margin-top: 2.5rem;
+}
+
+.home-cards {
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.home-cards article,
+.endpoint-list article {
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--panel-light);
+}
+
+.home-cards h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.home-cards p {
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.home-cards button {
+  min-height: 2.75rem;
+  padding: 0 1rem;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.endpoint-list article {
+  display: grid;
+  grid-template-columns: 5rem minmax(12rem, 1fr) 1fr;
+  gap: 1rem;
+  align-items: center;
+}
+
+.endpoint-list strong {
+  color: var(--accent);
+}
+
+.endpoint-list code,
+.endpoint-list span {
+  overflow-wrap: anywhere;
+}
+
+.endpoint-list span {
+  color: var(--muted);
+}
+
+.endpoint-list .api-endpoint {
+  display: block;
+}
+
+.api-endpoint header {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.api-endpoint header code {
+  overflow-wrap: anywhere;
+}
+
+.api-endpoint > p,
+.api-endpoint dd,
+.api-endpoint li {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.api-endpoint dl {
+  margin: 1rem 0;
+}
+
+.api-endpoint dl > div {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--border);
+}
+
+.api-endpoint dt,
+.api-endpoint h2 {
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.api-endpoint h2 {
+  margin: 1rem 0 0.5rem;
+}
+
+.api-endpoint dd {
+  margin: 0;
+}
+
+.api-endpoint pre {
+  margin: 0;
+  padding: 0.75rem;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: var(--background);
+  color: #eef5ff;
+  font: 0.9rem/1.6 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+}
+
+.api-endpoint ul {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.api-note {
+  margin-top: 1.5rem;
 }
 
 .module-panel > div,
@@ -128,7 +301,7 @@
 
 .stopwatch h2 {
   align-self: flex-start;
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 500;
 }
 
@@ -165,11 +338,11 @@
 
 .lap-card strong {
   color: var(--accent);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
 }
 
 .lap-card output {
-  font-size: 0.82rem;
+  font-size: 0.95rem;
   font-variant-numeric: tabular-nums;
 }
 
@@ -215,6 +388,256 @@
   color: var(--muted);
 }
 
+.alarms {
+  box-sizing: border-box;
+  height: 100%;
+  min-height: 0;
+  padding: clamp(2rem, 5vw, 5rem);
+  display: flex;
+  flex-direction: column;
+}
+
+.alarms h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 500;
+}
+
+.empty-state {
+  margin: auto;
+  color: var(--muted);
+}
+
+.alarm-list {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 0.75rem;
+  margin: 2rem 0;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.alarm-card {
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+}
+
+.alarm-days {
+  margin: 0 0 0.3rem;
+  color: var(--text);
+}
+
+.alarm-days small,
+.timezone-note,
+.sound-help {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.alarm-card time {
+  display: block;
+  font-size: 1.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.timezone-note {
+  display: block;
+  margin-top: 0.35rem;
+}
+
+.alarm-card-actions,
+.dialog-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.alarm-card-actions {
+  flex-direction: column;
+}
+
+.alarm-card-actions button,
+.dialog-actions button,
+.day-buttons button {
+  min-height: 2.25rem;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--panel-light);
+  color: var(--text);
+  font: inherit;
+}
+
+
+.add-alarm {
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 3.5rem;
+  margin-top: auto;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font: inherit;
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  z-index: 10;
+  inset: 0;
+  padding: 1rem;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 70%);
+}
+
+.alarm-dialog,
+.alarm-popup {
+  box-sizing: border-box;
+  width: min(100%, 31rem);
+  padding: 1.5rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--panel-light);
+}
+
+.alarm-dialog h2,
+.alarm-popup h2 {
+  margin: 0 0 1.5rem;
+}
+
+.form-row {
+  min-height: 3.25rem;
+  padding: 0.65rem 0;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.form-row > label,
+.form-row > span {
+  color: var(--muted);
+}
+
+.form-row input:not([type='checkbox']) {
+  width: 11rem;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--background);
+  color: var(--text);
+  text-align: right;
+}
+
+.time-fields {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.time-fields input {
+  width: 4.25rem !important;
+  text-align: center !important;
+}
+
+.form-row input[type='file'] {
+  max-width: 13rem;
+}
+
+.day-buttons {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.day-buttons button {
+  width: 2rem;
+  min-height: 2rem;
+  padding: 0;
+}
+
+.day-buttons button.selected,
+.dialog-actions .primary-action,
+.alarm-popup .primary-action {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.form-warning {
+  margin: 0.25rem 0 0.75rem;
+  color: #7a4300;
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.sound-help {
+  margin: -0.25rem 0 0.75rem;
+}
+
+.dialog-actions {
+  margin-top: 1.5rem;
+}
+
+.dialog-actions > span {
+  flex: 1;
+}
+
+.dialog-actions .delete-action {
+  border-color: #b13b3b;
+  color: #8d2222;
+}
+
+.alarm-popup {
+  text-align: center;
+}
+
+.alarm-popup p {
+  margin: 0 0 0.5rem;
+  color: var(--accent);
+  text-transform: uppercase;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
+
+.alarm-popup h2 {
+  font-size: 4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.alarm-popup button {
+  width: 100%;
+  min-height: 3.5rem;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 700;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
 button,
 a {
   cursor: pointer;
@@ -225,8 +648,53 @@ button:hover {
 }
 
 button:focus-visible,
-a:focus-visible {
-  outline: 3px solid #ffffff;
+a:focus-visible,
+input:focus-visible {
+  outline: 3px solid #0759b8;
+  outline-offset: 3px;
+}
+
+/* Swagger UI is intentionally light, so keep its typography and keyboard focus
+   clear when it appears inside the otherwise dark application. */
+.swagger-reference .swagger-ui {
+  margin-top: 2rem;
+  font-size: 1rem;
+}
+
+.swagger-reference .swagger-ui .info {
+  margin: 2rem 0;
+}
+
+.swagger-reference .swagger-ui .info .title {
+  font-size: 2rem;
+}
+
+.swagger-reference .swagger-ui .info p,
+.swagger-reference .swagger-ui .opblock-description-wrapper p,
+.swagger-reference .swagger-ui .response-col_description,
+.swagger-reference .swagger-ui .parameters-col_description,
+.swagger-reference .swagger-ui .opblock-summary-description {
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.swagger-reference .swagger-ui .opblock-summary {
+  min-height: 3.5rem;
+  padding: 0.65rem 0;
+}
+
+.swagger-reference .swagger-ui .opblock-summary-path,
+.swagger-reference .swagger-ui .opblock-summary-description,
+.swagger-reference .swagger-ui .response-col_status {
+  font-size: 1rem;
+}
+
+.swagger-reference .swagger-ui button:focus-visible,
+.swagger-reference .swagger-ui input:focus-visible,
+.swagger-reference .swagger-ui select:focus-visible,
+.swagger-reference .swagger-ui textarea:focus-visible,
+.swagger-reference .swagger-ui a:focus-visible {
+  outline: 3px solid #0759b8;
   outline-offset: 3px;
 }
 
@@ -257,6 +725,21 @@ a:focus-visible {
   .module-panel {
     min-height: calc(100dvh - 7rem);
     order: -1;
+  }
+
+  .single-panel {
+    height: auto;
+    min-height: calc(100dvh - 7rem);
+  }
+
+  .endpoint-list article {
+    grid-template-columns: 1fr;
+    gap: 0.35rem;
+  }
+
+  .api-endpoint dl > div {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
   }
 
   .stopwatch,
