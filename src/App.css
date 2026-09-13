@@ -446,6 +446,8 @@
   min-height: 0;
   flex: 1 1 auto;
   display: grid;
+  align-content: start;
+  grid-auto-rows: min-content;
   gap: 0.75rem;
   margin-top: 0.75rem;
 }
@@ -630,6 +632,8 @@
   min-height: 0;
   flex: 1 1 auto;
   display: grid;
+  align-content: start;
+  grid-auto-rows: min-content;
   gap: 0.75rem;
   margin: 2rem 0;
   overflow-y: auto;
