@@ -426,6 +426,23 @@
   padding-right: 0.25rem;
 }
 
+.world-clock-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.world-clock-fixed {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.city-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
 .timer-card,
 .city-card {
   padding: 1rem;
@@ -473,10 +490,15 @@
 }
 
 .city-card {
+  position: relative;
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.25rem 1rem;
   align-items: center;
+}
+
+.city-card.removable {
+  padding-right: 3.5rem;
 }
 
 .city-card strong,
@@ -490,16 +512,34 @@
 }
 
 .city-card time {
+  grid-column: 2;
   font-size: 1.35rem;
   font-variant-numeric: tabular-nums;
 }
 
-.city-card button {
-  grid-row: 1 / span 2;
-  grid-column: 3;
-  width: 2.5rem;
+.city-card output {
+  grid-column: 2;
+  text-align: right;
+}
+
+.utc-offset {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.city-card .remove-city {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  min-height: auto;
+  width: 1.5rem;
   padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
   font-size: 1.5rem;
+  line-height: 1;
 }
 
 .city-search {

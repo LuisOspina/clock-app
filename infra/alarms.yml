@@ -146,6 +146,10 @@ Resources:
           const read = (item) => item && ({ id: Number(item.id.N), hour: Number(item.hour.N), minute: Number(item.minute.N), days: item.days.L.map((x) => Number(x.N)), name: item.name.S, enabled: item.enabled.BOOL, timeZone: item.timeZone.S });
           const valid = (alarm) => alarm && Number.isInteger(alarm.hour) && alarm.hour >= 0 && alarm.hour <= 23 && Number.isInteger(alarm.minute) && alarm.minute >= 0 && alarm.minute <= 59 && Array.isArray(alarm.days) && alarm.days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6) && typeof alarm.name === 'string' && alarm.name.length <= 20 && typeof alarm.enabled === 'boolean' && typeof alarm.timeZone === 'string' && alarm.timeZone.length <= 100;
           const item = (id, alarm) => ({ pk: { S: 'ALARM' }, id: { N: String(id) }, hour: { N: String(alarm.hour) }, minute: { N: String(alarm.minute) }, days: { L: alarm.days.map((d) => ({ N: String(d) })) }, name: { S: alarm.name }, enabled: { BOOL: alarm.enabled }, timeZone: { S: alarm.timeZone } });
+          const locationKey = (event) => `LOCATION#${event.requestContext.authorizer.jwt.claims.sub ?? event.requestContext.authorizer.jwt.claims.client_id}`;
+          const readLocation = (item) => item && ({ id: Number(item.id.N), name: item.name.S, country: item.country.S, admin1: item.admin1.S || undefined, timeZone: item.timeZone.S });
+          const validLocation = (location) => location && Number.isInteger(location.id) && location.id > 0 && typeof location.name === 'string' && location.name.length > 0 && location.name.length <= 100 && typeof location.country === 'string' && location.country.length > 0 && location.country.length <= 100 && (location.admin1 === undefined || typeof location.admin1 === 'string' && location.admin1.length <= 100) && typeof location.timeZone === 'string' && location.timeZone.length > 0 && location.timeZone.length <= 100;
+          const locationItem = (key, location) => ({ pk: { S: key }, id: { N: String(location.id) }, name: { S: location.name }, country: { S: location.country }, admin1: { S: location.admin1 ?? '' }, timeZone: { S: location.timeZone } });
           const openApi = (serverUrl) => ({
             openapi: '3.0.3',
             info: { title: 'Clock Alarms API', version: '1.0.0', description: 'Shared alarms CRUD API using the bundled default sound.' },
@@ -153,6 +157,8 @@ Resources:
             paths: {
               '/alarms': { get: { summary: 'List alarms', responses: { 200: { description: 'Alarm list' }, 429: { description: 'Rate limit reached' }, 500: { description: 'Unexpected failure' } } }, post: { summary: 'Create an alarm', responses: { 201: { description: 'Alarm created' }, 400: { description: 'Invalid alarm' }, 409: { description: 'Alarm limit or creation conflict' }, 429: { description: 'Rate limit reached' }, 500: { description: 'Unexpected failure' } } } },
               '/alarms/{id}': { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } }], put: { summary: 'Update an alarm', responses: { 200: { description: 'Alarm updated' }, 400: { description: 'Invalid alarm' }, 404: { description: 'Alarm not found' }, 429: { description: 'Rate limit reached' }, 500: { description: 'Unexpected failure' } } }, delete: { summary: 'Delete an alarm', responses: { 204: { description: 'Alarm deleted' }, 400: { description: 'Invalid alarm id' }, 404: { description: 'Alarm not found' }, 429: { description: 'Rate limit reached' }, 500: { description: 'Unexpected failure' } } } },
+              '/locations': { get: { summary: 'List the signed-in user’s world-clock locations', responses: { 200: { description: 'Location list' }, 403: { description: 'Forbidden' }, 500: { description: 'Unexpected failure' } } }, post: { summary: 'Add a world-clock location for the signed-in user', responses: { 201: { description: 'Location added' }, 400: { description: 'Invalid location' }, 409: { description: 'Location already exists or the 10-location limit was reached' }, 403: { description: 'Forbidden' }, 500: { description: 'Unexpected failure' } } } },
+              '/locations/{id}': { parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'integer', minimum: 1 } }], delete: { summary: 'Remove one of the signed-in user’s world-clock locations', responses: { 204: { description: 'Location deleted' }, 404: { description: 'Location not found' }, 403: { description: 'Forbidden' }, 500: { description: 'Unexpected failure' } } } },
               '/openapi.json': { get: { summary: 'Get this OpenAPI document', responses: { 200: { description: 'OpenAPI document' }, 429: { description: 'Rate limit reached' } } } },
             },
             components: { schemas: { AlarmInput: { type: 'object', required: ['hour', 'minute', 'days', 'name', 'enabled', 'timeZone'], properties: { hour: { type: 'integer', minimum: 0, maximum: 23 }, minute: { type: 'integer', minimum: 0, maximum: 59 }, days: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 6 } }, name: { type: 'string', maxLength: 20 }, enabled: { type: 'boolean' }, timeZone: { type: 'string', maxLength: 100 } } }, Alarm: { allOf: [{ $ref: '#/components/schemas/AlarmInput' }, { type: 'object', required: ['id'], properties: { id: { type: 'integer', minimum: 1 } } }] }, AlarmEnvelope: { type: 'object', properties: { alarm: { $ref: '#/components/schemas/Alarm' } } }, AlarmList: { type: 'object', properties: { alarms: { type: 'array', items: { $ref: '#/components/schemas/Alarm' } } } } } },
@@ -167,6 +173,21 @@ Resources:
             if (method === 'GET' && path === '/openapi.json') return json(200, documentedApi(`https://${event.requestContext.domainName}`));
             if (method === 'OPTIONS') return { statusCode: 204, headers: {} };
             if (!allowed(event)) return json(403, { message: 'Forbidden' });
+            const locationPath = path.match(/^\/locations\/(\d+)$/);
+            if (method === 'GET' && path === '/locations') {
+              const result = await db.send(new QueryCommand({ TableName: table, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': { S: locationKey(event) } }, ConsistentRead: true }));
+              return json(200, { locations: result.Items.map(readLocation) });
+            }
+            if (method === 'POST' && path === '/locations') {
+              if (!validLocation(body)) return json(400, { message: 'Invalid location' });
+              const key = locationKey(event);
+              const existing = await db.send(new QueryCommand({ TableName: table, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': { S: key } }, Select: 'COUNT', ConsistentRead: true }));
+              if (existing.Count >= 10) return json(409, { message: 'Maximum of 10 locations has been reached.' });
+              try { await db.send(new PutItemCommand({ TableName: table, Item: locationItem(key, body), ConditionExpression: 'attribute_not_exists(pk)' })); return json(201, { location: body }); } catch (error) { return error.name === 'ConditionalCheckFailedException' ? json(409, { message: 'Location is already added.' }) : json(500, { message: 'Could not add location' }); }
+            }
+            if (method === 'DELETE' && locationPath) {
+              try { await db.send(new DeleteItemCommand({ TableName: table, Key: { pk: { S: locationKey(event) }, id: { N: locationPath[1] } }, ConditionExpression: 'attribute_exists(pk)' })); return { statusCode: 204, headers: {} }; } catch (error) { return error.name === 'ConditionalCheckFailedException' ? json(404, { message: 'Location not found' }) : json(500, { message: 'Could not delete location' }); }
+            }
             if (method === 'GET' && path === '/alarms') {
               const result = await db.send(new QueryCommand({ TableName: table, KeyConditionExpression: 'pk = :pk', ExpressionAttributeValues: { ':pk': { S: 'ALARM' } }, ConsistentRead: true }));
               return json(200, { alarms: result.Items.map(read) });
